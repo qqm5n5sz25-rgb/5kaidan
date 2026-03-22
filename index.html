@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>怪談生成器</title>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ══ リセット・変数 ══ */
+:root{
+  --bg:#0a0705; --cp:#ffad5a; --ca:#ff6b1a;
+  --blood:#8b0000; --ink:#c8b89a; --dim:#7a6a55;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{
+  height:100%; background:var(--bg); color:var(--ink);
+  font-family:'Shippori Mincho','Hiragino Mincho ProN',serif;
+  overflow-x:hidden;
+}
+
+/* ══ 画面共通 ══ */
+.screen{display:none; min-height:100vh;}
+.screen.active{display:flex; flex-direction:column;}
+
+/* ══ 入力画面 ══ */
+#screen-input{background:var(--bg); align-items:stretch;}
+.s-header{text-align:center; padding:52px 20px 28px;}
+.s-title{
+  font-size:clamp(1.7rem,8vw,2.8rem); font-weight:700;
+  letter-spacing:.3em; color:var(--cp);
+  text-shadow:0 0 40px rgba(255,107,26,.6),0 0 80px rgba(255,69,0,.3);
+  animation:titleFlicker 8s infinite;
+}
+.s-sub{font-size:.75rem; letter-spacing:.5em; color:var(--dim); margin-top:6px;}
+
+.input-card{
+  margin:0 16px 40px;
+  background:linear-gradient(135deg,#1a1108,#130e08);
+  border:1px solid rgba(200,184,154,.12);
+  border-radius:8px; padding:24px;
+  box-shadow:0 8px 60px rgba(0,0,0,.7);
+}
+.field-label{
+  font-size:.68rem; letter-spacing:.4em; color:var(--ca);
+  display:flex; align-items:center; gap:8px; margin-bottom:12px;
+}
+.field-label::after{
+  content:''; flex:1; height:1px;
+  background:linear-gradient(90deg,rgba(255,107,26,.3),transparent);
+}
+.apikey-input,.kw-input{
+  width:100%; padding:13px 14px;
+  background:rgba(0,0,0,.5); color:var(--ink);
+  border:1px solid rgba(200,184,154,.15); border-radius:6px;
+  font-family:inherit; font-size:.9rem;
+  outline:none; -webkit-appearance:none;
+  transition:border-color .25s;
+}
+.apikey-input{font-family:monospace; font-size:.78rem;}
+.apikey-input:focus,.kw-input:focus{border-color:rgba(255,107,26,.5);}
+input::placeholder{color:rgba(122,106,85,.6);}
+.hint{font-size:.66rem; color:var(--dim); margin-top:6px; letter-spacing:.04em; line-height:1.6;}
+.divider{height:1px; background:rgba(200,184,154,.08); margin:20px 0;}
+
+.gen-btn{
+  width:100%; margin-top:20px; padding:17px;
+  background:linear-gradient(135deg,#5a0000,#8b0000 50%,#5a0000);
+  border:1px solid rgba(200,100,50,.4); border-radius:6px;
+  color:var(--cp); font-family:inherit; font-size:1rem; font-weight:700;
+  letter-spacing:.5em; text-shadow:0 0 20px rgba(255,107,26,.8);
+  cursor:pointer; -webkit-appearance:none; transition:opacity .2s;
+}
+.gen-btn:active{opacity:.7;}
+.gen-btn:disabled{opacity:.4; cursor:not-allowed;}
+
+#err-box{
+  display:none; margin-top:14px; padding:12px 14px;
+  background:rgba(139,0,0,.3); border:1px solid rgba(200,50,50,.4);
+  border-radius:6px; font-size:.75rem; color:#ff9999; line-height:1.7;
+}
+
+/* ══ ローディング画面 ══ */
+#screen-loading{
+  background:rgba(5,3,2,.98);
+  align-items:center; justify-content:center; padding:40px 20px;
+}
+.loading-title{
+  font-size:.95rem; letter-spacing:.6em; color:var(--cp);
+  margin-bottom:8px; text-align:center;
+}
+.loading-phase{
+  font-size:.73rem; letter-spacing:.2em; color:var(--dim);
+  margin-bottom:28px; min-height:1.5em; text-align:center; line-height:1.7;
+}
+.prog-wrap{width:min(260px,80vw); margin-bottom:8px;}
+.prog-track{
+  height:3px; background:rgba(200,184,154,.1);
+  border-radius:2px; overflow:hidden;
+}
+.prog-fill{
+  height:100%; width:0%;
+  background:linear-gradient(90deg,#8b0000,#ff6b1a);
+  border-radius:2px; transition:width .6s ease;
+}
+.prog-pct{text-align:right; font-size:.7rem; color:var(--ca); margin-top:5px;}
+.step-list{
+  display:flex; flex-direction:column; gap:8px;
+  width:min(260px,80vw); margin-top:14px;
+}
+.step-item{
+  display:flex; align-items:center; gap:10px;
+  font-size:.7rem; letter-spacing:.12em; transition:all .4s;
+}
+.step-dot{width:6px; height:6px; border-radius:50%; flex-shrink:0; transition:all .4s;}
+
+/* ══ 怪談表示画面 ══ */
+#screen-story{background:var(--bg);}
+.story-card{
+  margin:0 16px 40px;
+  background:linear-gradient(135deg,#140e08,#0f0a06);
+  border:1px solid rgba(200,184,154,.1);
+  border-radius:8px; padding:28px 24px;
+  position:relative; overflow:hidden;
+}
+.story-card::before{
+  content:''; position:absolute; top:0; left:0;
+  width:3px; height:100%;
+  background:linear-gradient(180deg,transparent,#8b0000,transparent);
+}
+.story-title{
+  font-size:1.15rem; font-weight:700; color:var(--cp);
+  letter-spacing:.25em; margin-bottom:8px;
+}
+.story-meta{
+  font-size:.65rem; color:var(--dim); letter-spacing:.15em;
+  margin-bottom:20px; padding-bottom:14px;
+  border-bottom:1px solid rgba(200,184,154,.08);
+}
+.story-body{
+  font-size:.9rem; line-height:2.1; letter-spacing:.07em;
+  color:var(--ink); white-space:pre-wrap;
+}
+.action-row{display:flex; gap:10px; margin-top:22px; flex-wrap:wrap;}
+.play-btn{
+  flex:1; min-width:120px; padding:13px 10px;
+  background:linear-gradient(135deg,#3a0000,#6b0000);
+  border:1px solid rgba(200,100,50,.4); border-radius:6px;
+  color:var(--cp); font-family:inherit; font-size:.78rem; font-weight:700;
+  letter-spacing:.3em; cursor:pointer; -webkit-appearance:none;
+  transition:opacity .2s;
+}
+.play-btn:active{opacity:.7;}
+.sub-btn{
+  padding:13px 14px; background:none;
+  border:1px solid rgba(200,184,154,.2); border-radius:6px;
+  color:var(--dim); font-family:inherit; font-size:.75rem;
+  letter-spacing:.25em; cursor:pointer; -webkit-appearance:none;
+  transition:opacity .2s;
+}
+.sub-btn:active{opacity:.6;}
+
+/* ══ プレイヤー画面 ══ */
+#screen-player{background:#050302; min-height:100vh; display:none; flex-direction:column;}
+#screen-player.active{display:flex;}
+
+.player-header{
+  padding:max(48px,env(safe-area-inset-top)) 20px 16px;
+  text-align:center;
+  background:rgba(0,0,0,.7);
+  border-bottom:1px solid rgba(200,184,154,.07);
+  flex-shrink:0;
+}
+.player-header-title{
+  font-size:.78rem; color:var(--cp); letter-spacing:.3em;
+  text-shadow:0 0 20px rgba(255,107,26,.4);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+/* 字幕 */
+.subtitle-area{
+  flex:1; display:flex; align-items:center; justify-content:center;
+  padding:28px 32px;
+  background:radial-gradient(ellipse at center,rgba(28,8,4,.95),rgba(5,3,2,1));
+}
+.subtitle-text{
+  font-size:clamp(1.05rem,5vw,1.45rem);
+  color:#f2e2c4;
+  text-align:center;
+  line-height:2.1;
+  letter-spacing:.13em;
+  text-shadow:0 0 48px rgba(255,200,100,.25),0 2px 10px rgba(0,0,0,.9);
+  max-width:580px;
+  transition:opacity .22s ease;
+}
+.subtitle-text.fade{opacity:0;}
+
+/* シーケンスバー（fix: overflow hidden でハンドルが消える問題を修正） */
+.seq-wrap{
+  padding:0 24px 14px;
+  background:rgba(5,3,2,.97);
+  flex-shrink:0;
+}
+.seq-info{
+  display:flex; justify-content:space-between;
+  font-size:.63rem; color:var(--dim); letter-spacing:.1em;
+  padding-top:12px; margin-bottom:10px;
+}
+.seq-track{
+  width:100%; height:20px;       /* タッチしやすい高さ */
+  display:flex; align-items:center;
+  cursor:pointer; position:relative;
+}
+.seq-rail{
+  position:absolute; left:0; right:0;
+  height:4px; background:rgba(200,184,154,.12); border-radius:2px;
+}
+.seq-fill{
+  position:absolute; left:0;
+  height:4px; width:0%;
+  background:linear-gradient(90deg,var(--blood),var(--ca));
+  border-radius:2px; transition:width .25s;
+}
+/* ハンドル：seq-trackの外に出ないようabsoluteで配置 */
+.seq-handle{
+  position:absolute;
+  width:14px; height:14px; border-radius:50%;
+  background:var(--cp);
+  box-shadow:0 0 10px var(--ca),0 0 4px rgba(0,0,0,.8);
+  transform:translateX(-50%);
+  transition:left .25s;
+  pointer-events:none;
+  top:50%; margin-top:-7px;
+}
+
+/* コントロールバー */
+.ctrl-bar{
+  background:rgba(4,2,1,.99);
+  padding:16px 24px;
+  padding-bottom:max(22px,env(safe-area-inset-bottom));
+  display:flex; align-items:center; justify-content:space-between;
+  gap:14px;
+  border-top:1px solid rgba(200,184,154,.06);
+  flex-shrink:0;
+}
+.ctrl-side{display:flex; align-items:center; gap:12px;}
+
+/* ボタン */
+.cb{
+  background:none; font-family:inherit; cursor:pointer;
+  -webkit-appearance:none; border:none;
+  display:flex; align-items:center; justify-content:center;
+  transition:opacity .15s;
+  touch-action:manipulation;
+}
+.cb:active{opacity:.45;}
+
+.btn-skip{
+  width:44px; height:44px; border-radius:50%;
+  border:1px solid rgba(200,184,154,.22);
+  color:var(--ink); font-size:1.1rem;
+}
+.btn-play{
+  width:62px; height:62px; border-radius:50%;
+  background:linear-gradient(145deg,#5a0000,#8b0000);
+  border:2px solid rgba(200,100,50,.55);
+  color:var(--cp); font-size:1.5rem;
+  box-shadow:0 0 24px rgba(139,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08);
+}
+.btn-end{
+  font-size:.65rem; letter-spacing:.25em;
+  color:rgba(200,100,100,.75);
+  border:1px solid rgba(139,0,0,.4);
+  border-radius:4px; padding:9px 14px;
+}
+
+/* アニメーション */
+@keyframes titleFlicker{
+  0%,100%{opacity:1;}
+  92%{opacity:1;} 93%{opacity:.5;} 94%{opacity:1;} 97%{opacity:.75;} 98%{opacity:1;}
+}
+
+/* スクロールバー */
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(200,184,154,.15); border-radius:2px;}
+</style>
+</head>
+<body>
+
+<!-- ══ 入力画面 ══ -->
+<div id="screen-input" class="screen active">
+  <div class="s-header">
+    <div class="s-title">怪　談　生　成　器</div>
+    <div class="s-sub">─ 闇 の 語 り 部 ─</div>
+  </div>
+  <div class="input-card">
+    <div class="field-label">Anthropic APIキー</div>
+    <input type="password" id="apikey" class="apikey-input"
+      placeholder="sk-ant-api03-..."
+      autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="hint">取得：console.anthropic.com → API Keys</div>
+    <div class="divider"></div>
+    <div class="field-label">呪いのキーワード</div>
+    <input type="text" id="keyword" class="kw-input"
+      placeholder="例：古井戸、赤い着物、子守唄" autocorrect="off">
+    <div class="hint">怪談の題材となるキーワードを入力してください</div>
+    <button class="gen-btn" id="gen-btn" onclick="startGenerate()">▲ 怪談を紡ぐ ▲</button>
+    <div id="err-box"></div>
+  </div>
+</div>
+
+<!-- ══ ローディング画面 ══ -->
+<div id="screen-loading" class="screen">
+  <p class="loading-title">怪 談 を 紡 い で い る</p>
+  <p class="loading-phase" id="loading-phase">AIが闇の中から物語を呼び起こしています…</p>
+  <div class="prog-wrap">
+    <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+    <div class="prog-pct" id="prog-pct">0%</div>
+  </div>
+  <div class="step-list" id="step-list"></div>
+</div>
+
+<!-- ══ 怪談表示画面 ══ -->
+<div id="screen-story" class="screen">
+  <div class="s-header">
+    <div class="s-title" style="font-size:clamp(1.4rem,7vw,2.4rem)">怪　談　生　成　器</div>
+    <div class="s-sub">─ 闇 の 語 り 部 ─</div>
+  </div>
+  <div class="story-card">
+    <div class="story-title" id="story-title"></div>
+    <div class="story-meta"  id="story-meta"></div>
+    <div class="story-body"  id="story-body"></div>
+    <div class="action-row">
+      <button class="play-btn" onclick="startPlayer()">▶ 読み上げ</button>
+      <button class="sub-btn"  onclick="copyStory()">コピー</button>
+      <button class="sub-btn"  onclick="showScreen('screen-input')">再生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ プレイヤー画面 ══ -->
+<div id="screen-player" class="screen">
+  <div class="player-header">
+    <div class="player-header-title" id="player-title">─</div>
+  </div>
+
+  <div class="subtitle-area">
+    <div class="subtitle-text" id="subtitle-text">　</div>
+  </div>
+
+  <!-- シーケンスバー（fix: ハンドルがクリップされない構造） -->
+  <div class="seq-wrap">
+    <div class="seq-info">
+      <span id="seq-cur">0 / 0</span>
+      <span id="seq-pct-label">0%</span>
+    </div>
+    <div class="seq-track" id="seq-track">
+      <div class="seq-rail"></div>
+      <div class="seq-fill"   id="seq-fill"></div>
+      <div class="seq-handle" id="seq-handle" style="left:0%"></div>
+    </div>
+  </div>
+
+  <div class="ctrl-bar">
+    <div class="ctrl-side">
+      <button class="cb btn-skip" onclick="seekRel(-5)" title="5文戻る">⏮</button>
+    </div>
+    <button class="cb btn-play" id="btn-play" onclick="togglePause()">▶</button>
+    <div class="ctrl-side">
+      <button class="cb btn-skip" onclick="seekRel(5)" title="5文進む">⏭</button>
+      <button class="cb btn-end"  onclick="stopPlayer()">終了</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════
+   定数
+══════════════════════════════════════════ */
+const STEPS = [
+  {pct:12, label:'キーワードを解析中',      phase:'AIがキーワードの怪異を読み解いています…'},
+  {pct:30, label:'怪異の舞台を設定中',      phase:'古の地に舞台を設けています…'},
+  {pct:52, label:'登場人物を召喚中',        phase:'幽世から人物を呼び出しています…'},
+  {pct:74, label:'恐怖の物語を紡ぐ中',     phase:'暗闇から言葉を紡いでいます…'},
+  {pct:92, label:'読み仮名を付けています',  phase:'怪しの言葉に魂を吹き込んでいます…'},
+];
+
+/* ══════════════════════════════════════════
+   画面管理
+══════════════════════════════════════════ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+/* ══════════════════════════════════════════
+   ローディングプログレス
+══════════════════════════════════════════ */
+let progTimer = null;
+
+function buildStepList() {
+  const list = document.getElementById('step-list');
+  list.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'step-item'; d.id = 'step-' + i;
+    d.style.cssText = 'opacity:.3;color:#7a6a55;';
+    d.innerHTML = `<div class="step-dot" id="dot-${i}" style="background:rgba(200,184,154,.2)"></div>${s.label}`;
+    list.appendChild(d);
+  });
+}
+
+function startProgress() {
+  updateBar(0); buildStepList();
+  document.getElementById('loading-phase').textContent = 'AIが闇の中から物語を呼び起こしています…';
+  let elapsed = 0;
+  clearInterval(progTimer);
+  progTimer = setInterval(() => {
+    elapsed += 0.3;
+    const p = Math.round(92 * (1 - Math.pow(1 - Math.min(1, elapsed / 30), 1.6)));
+    updateBar(p);
+    let ns = -1;
+    for (let i = STEPS.length - 1; i >= 0; i--) { if (p >= STEPS[i].pct) { ns = i; break; } }
+    updateSteps(ns);
+  }, 300);
+}
+
+function updateBar(p) {
+  document.getElementById('prog-fill').style.width = p + '%';
+  document.getElementById('prog-pct').textContent  = p + '%';
+}
+
+function updateSteps(a) {
+  STEPS.forEach((s, i) => {
+    const el  = document.getElementById('step-' + i);
+    const dot = document.getElementById('dot-' + i);
+    if (!el) return;
+    if (i < a) {
+      el.style.cssText  = 'opacity:1;color:#c8b89a;';
+      dot.style.cssText = 'background:#7de8a8;';
+    } else if (i === a) {
+      el.style.cssText  = 'opacity:1;color:#ffad5a;';
+      dot.style.cssText = 'background:#ff6b1a;box-shadow:0 0 6px #ff6b1a;';
+      document.getElementById('loading-phase').textContent = s.phase;
+    } else {
+      el.style.cssText  = 'opacity:.3;color:#7a6a55;';
+      dot.style.cssText = 'background:rgba(200,184,154,.2);';
+    }
+  });
+}
+
+function stopProgress() {
+  clearInterval(progTimer);
+  updateBar(100); updateSteps(STEPS.length);
+  document.getElementById('loading-phase').textContent = '怪談の完成…';
+}
+
+/* ══════════════════════════════════════════
+   ルビ処理 + フォールバック辞書
+══════════════════════════════════════════ */
+function toDisplay(t) {
+  return t.replace(/([^{}\s]+)\{([^}]+)\}/g, '$1');
+}
+
+// フォールバック辞書（AIがルビを付け忘れた場合の保険）
+// ★長い語を先に置く（部分マッチを防ぐため）
+const KANA_DIC = [
+  // 時間・天候
+  [/真夜中/g,'まよなか'],[/夕暮れ/g,'ゆうぐれ'],[/月明かり/g,'つきあかり'],
+  [/暗闇/g,'くらやみ'],[/深夜/g,'しんや'],[/今夜/g,'こんや'],
+  [/今朝/g,'けさ'],[/夕方/g,'ゆうがた'],[/今日/g,'きょう'],
+  [/明日/g,'あした'],[/昨日/g,'きのう'],[/闇/g,'やみ'],
+  // 場所
+  [/古井戸/g,'ふるいど'],[/山奥/g,'やまおく'],[/廃屋/g,'はいおく'],
+  [/屋敷/g,'やしき'],[/納屋/g,'なや'],[/井戸/g,'いど'],
+  [/蔵/g,'くら'],[/峠/g,'とうげ'],[/辻/g,'つじ'],
+  [/森/g,'もり'],[/林/g,'はやし'],[/橋/g,'はし'],[/川/g,'かわ'],
+  // 人物
+  [/老婆/g,'ろうば'],[/老爺/g,'ろうや'],[/老人/g,'ろうじん'],
+  [/少女/g,'しょうじょ'],[/少年/g,'しょうねん'],[/青年/g,'せいねん'],
+  [/百姓/g,'ひゃくしょう'],[/農夫/g,'のうふ'],[/武士/g,'ぶし'],
+  [/亭主/g,'ていしゅ'],[/娘/g,'むすめ'],[/息子/g,'むすこ'],
+  [/妻/g,'つま'],[/夫/g,'おっと'],[/兄/g,'あに'],[/姉/g,'あね'],
+  // 怪異
+  [/怨霊/g,'おんりょう'],[/悪霊/g,'あくりょう'],[/亡霊/g,'ぼうれい'],
+  [/幽霊/g,'ゆうれい'],[/化け物/g,'ばけもの'],[/妖怪/g,'ようかい'],
+  [/魂魄/g,'こんぱく'],[/彼岸/g,'ひがん'],[/冥途/g,'めいど'],
+  [/地獄/g,'じごく'],[/成仏/g,'じょうぶつ'],[/怪異/g,'かいい'],
+  [/祟り/g,'たたり'],[/呪い/g,'のろい'],[/憑依/g,'ひょうい'],
+  [/魂/g,'たましい'],[/霊/g,'れい'],
+  // 感情・状態
+  [/禍々しい/g,'まがまがしい'],[/不気味/g,'ぶきみ'],[/不思議/g,'ふしぎ'],
+  [/戦慄/g,'せんりつ'],[/恐怖/g,'きょうふ'],[/慟哭/g,'どうこく'],
+  [/嗚咽/g,'おえつ'],[/奇妙/g,'きみょう'],[/異様/g,'いよう'],
+  [/儚い/g,'はかない'],[/哀れ/g,'あわれ'],[/無惨/g,'むざん'],
+  // 動作
+  [/囁き/g,'ささやき'],[/呻き/g,'うめき'],[/叫び/g,'さけび'],
+  [/足音/g,'あしおと'],[/気配/g,'けはい'],[/殺気/g,'さっき'],
+  [/蠢く/g,'うごめく'],[/佇む/g,'たたずむ'],[/這う/g,'はう'],
+  [/震え/g,'ふるえ'],[/慌て/g,'あわて'],
+  // 基本単語
+  [/山/g,'やま'],[/村/g,'むら'],[/家/g,'いえ'],[/夜/g,'よる'],
+  [/声/g,'こえ'],[/顔/g,'かお'],[/体/g,'からだ'],[/血/g,'ち'],
+  [/手/g,'て'],[/足/g,'あし'],[/目/g,'め'],[/口/g,'くち'],
+  [/頭/g,'あたま'],[/心/g,'こころ'],[/死/g,'し'],[/人/g,'ひと'],
+];
+
+function toSpeech(t) {
+  // ① ルビ付き → よみ
+  let s = t.replace(/([^{}\s]+)\{([^}]+)\}/g, '$2');
+  // ② フォールバック辞書
+  KANA_DIC.forEach(([re, r]) => { s = s.replace(re, r); });
+  return s;
+}
+
+/* ══════════════════════════════════════════
+   文分割（句点単位・細かく割りすぎない）
+══════════════════════════════════════════ */
+function buildSegments(rawBody) {
+  const segs = [];
+  const paras = rawBody.split(/\n+/).filter(p => p.trim());
+
+  paras.forEach((para, pi) => {
+    const isLastPara = (pi === paras.length - 1);
+    // 句点系で分割（区切り文字を含む）
+    const parts = para.split(/(?<=[。！？…]+)/).map(s => s.trim()).filter(Boolean);
+
+    parts.forEach((raw, si) => {
+      const isLastSeg = (si === parts.length - 1);
+      const isEnd     = isLastSeg && isLastPara;
+
+      if (raw.length <= 90) {
+        segs.push(makeSeg(raw, isEnd || isLastSeg));
+      } else {
+        // 長文のみ読点で補助分割
+        raw.split(/(?<=、)/).map(s => s.trim()).filter(Boolean).forEach((sub, ki, arr) => {
+          segs.push(makeSeg(sub, isEnd && ki === arr.length - 1));
+        });
+      }
+    });
+  });
+
+  return segs;
+}
+
+function makeSeg(raw, isEnd) {
+  const display = toDisplay(raw);
+  const speech  = toSpeech(raw);
+  return { display, speech, pause: calcPause(raw, isEnd) };
+}
+
+function calcPause(text, isEnd) {
+  let ms = 320;
+  if (/。/.test(text))        ms = 780;
+  if (/…/.test(text))         ms = 1100;
+  if (/[！？]/.test(text))    ms = 680;
+  if (/、[^。！？]*$/.test(text)) ms = 240;
+  if (isEnd) ms += 900;
+  // ±130ms のゆらぎ
+  return ms + (Math.random() * 260 - 130);
+}
+
+/* ══════════════════════════════════════════
+   怪談生成
+══════════════════════════════════════════ */
+let savedTitle    = '';
+let savedSegments = [];
+let savedDisplay  = '';
+
+async function startGenerate() {
+  const apiKey  = document.getElementById('apikey').value.trim();
+  const keyword = document.getElementById('keyword').value.trim();
+  if (!apiKey)  { alert('APIキーを入力してください'); return; }
+  if (!keyword) { alert('キーワードを入力してください'); return; }
+
+  document.getElementById('err-box').style.display = 'none';
+  document.getElementById('gen-btn').disabled = true;
+  showScreen('screen-loading');
+  startProgress();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 5000,
+        system: `あなたは日本の伝統的な怪談師です。江戸・明治時代の雰囲気をもつ昔話調の怪談話を創作します。
+
+【絶対に守るルール】
+- 文体は昔話調（「むかし、むかし」「〜でございます」「〜という話でございます」など）
+- 4000〜5000文字程度
+- 登場人物には古風な和名をつける
+- 後味の悪い結末、怪異の正体は曖昧に
+
+【読み仮名ルール（最重要）】
+本文中に登場する「漢字を含む全ての単語」に必ず「単語{よみ}」形式でルビを振ること。
+ひらがな・カタカナのみの単語にはルビ不要。漢字が1文字でも含まれれば必ずルビを付ける。
+
+頻出語の例（これ以外も必ず全て付けること）：
+昔{むかし}、村{むら}、山{やま}、川{かわ}、家{いえ}、人{ひと}、夜{よる}、声{こえ}、
+目{め}、手{て}、足{あし}、顔{かお}、体{からだ}、血{ち}、死{し}、口{くち}、頭{あたま}、
+古井戸{ふるいど}、怪異{かいい}、祟り{たたり}、魂魄{こんぱく}、彼岸{ひがん}、
+憑依{ひょうい}、呪い{のろい}、霊{れい}、幽霊{ゆうれい}、化け物{ばけもの}、
+暗闇{くらやみ}、月明かり{つきあかり}、夕暮れ{ゆうぐれ}、深夜{しんや}、
+老婆{ろうば}、老人{ろうじん}、青年{せいねん}、武士{ぶし}、娘{むすめ}、
+囁き{ささやき}、嗚咽{おえつ}、慟哭{どうこく}、呻き{うめき}、
+足音{あしおと}、気配{けはい}、恐怖{きょうふ}、戦慄{せんりつ}
+
+一度ルビを振った語は以降も必ず同じ読みで統一すること。
+
+最初の行に「タイトル：〇〇〇〇」と書き、空行の後に本文を書いてください。`,
+        messages: [{
+          role: 'user',
+          content: `キーワード：${keyword}\n\nこのキーワードから着想を得て怪談を書いてください。`,
+        }],
+      }),
+    });
+
+    const data = await res.json();
+    const raw  = data?.content?.[0]?.text;
+    if (!raw) throw new Error(data?.error?.message || 'レスポンスが空 (status ' + res.status + ')');
+
+    // タイトル抽出
+    const lines = raw.split('\n');
+    let title = '名無しの怪談', bs = 0;
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      if (/^タイトル[：:]/.test(lines[i])) {
+        title = lines[i].replace(/^タイトル[：:]/, '').trim();
+        bs = i + 1; break;
+      }
+    }
+    while (bs < lines.length && !lines[bs].trim()) bs++;
+    const rawBody = lines.slice(bs).join('\n').trim();
+
+    savedTitle    = toDisplay(title);
+    savedSegments = buildSegments(rawBody);
+    savedDisplay  = toDisplay(rawBody);
+
+    stopProgress();
+    setTimeout(() => {
+      document.getElementById('story-title').textContent = savedTitle;
+      document.getElementById('story-meta').textContent  =
+        `キーワード：${keyword}　│　約${savedDisplay.length}文字　│　${savedSegments.length}文`;
+      document.getElementById('story-body').textContent  = savedDisplay;
+      document.getElementById('gen-btn').disabled = false;
+      showScreen('screen-story');
+    }, 700);
+
+  } catch (err) {
+    stopProgress();
+    setTimeout(() => {
+      document.getElementById('gen-btn').disabled = false;
+      showScreen('screen-input');
+      const eb = document.getElementById('err-box');
+      eb.textContent   = '⚠ エラー：' + err.message;
+      eb.style.display = 'block';
+    }, 400);
+  }
+}
+
+/* ══════════════════════════════════════════
+   音声エンジン
+   【修正内容】
+   ① uttId でコールバックの stale 発火を防止
+   ② watchdog タイマーで iOS の停止バグを検出・リカバリ
+   ③ pause = cancel + 再開時 speakAt(segIdx) で再スタート
+   ④ keepAlive を廃止（発話中に pause/resume するとバグる）
+   ⑤ naturalizeText を廃止（全角スペースが誤読の原因）
+══════════════════════════════════════════ */
+let segIdx       = 0;
+let isPaused     = false;
+let isPlaying    = false;
+let pauseTimer   = null;
+let watchdogTimer = null;
+let currentUttId = 0;      // 発話ごとのユニークID（stale callback 防止）
+let selectedVoice = null;
+
+function pickVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  const jp = voices.filter(v => v.lang && v.lang.startsWith('ja'));
+  if (!jp.length) return null;
+  return jp.find(v => /男|otoya|ichiro|male/i.test(v.name))
+      || jp.find(v => v.default)
+      || jp[0];
+}
+
+function startPlayer() {
+  if (!savedSegments.length) { alert('先に怪談を生成してください'); return; }
+  if (!window.speechSynthesis) { alert('このブラウザは音声合成に対応していません'); return; }
+
+  cancelAll();
+  segIdx = 0; isPaused = false; isPlaying = true;
+  selectedVoice = pickVoice();
+
+  document.getElementById('player-title').textContent = savedTitle;
+  updatePlayBtn();
+  updateSeqUI(0, savedSegments.length);
+  showScreen('screen-player');
+
+  // iOS/Brave: ユーザー操作直後でないと発声しないため即時実行
+  speakAt(0);
+}
+
+function speakAt(idx) {
+  if (!isPlaying || isPaused) return;
+
+  // 終了
+  if (idx >= savedSegments.length) {
+    isPlaying = false;
+    updateSubtitle('─ 語り終わりました ─');
+    updateSeqUI(savedSegments.length, savedSegments.length);
+    setTimeout(() => { showScreen('screen-story'); }, 3800);
+    return;
+  }
+
+  segIdx = idx;
+  const seg = savedSegments[idx];
+  const uttId = ++currentUttId; // このコールバック専用のID
+
+  // UI 更新
+  updateSubtitle(seg.display);
+  updateSeqUI(idx + 1, savedSegments.length);
+
+  // 発話オブジェクト
+  const utt = new SpeechSynthesisUtterance(seg.speech);
+  utt.lang   = 'ja-JP';
+  utt.rate   = 0.80;
+  utt.pitch  = 0.88;
+  utt.volume = 1.0;
+  if (selectedVoice) utt.voice = selectedVoice;
+
+  // ── watchdog ──
+  // iOSは長い沈黙後や約15秒でspeakを止めることがある
+  // セグメントの推定発話時間 + 4秒 後にまだ次に進んでいなければ強制スキップ
+  const estimatedMs = Math.max(1200, seg.speech.length * 130); // ~130ms/文字 at rate 1.0
+  clearTimeout(watchdogTimer);
+  watchdogTimer = setTimeout(() => {
+    if (currentUttId !== uttId) return; // すでに別の発話に移行済み
+    if (!isPlaying || isPaused) return;
+    console.warn('[watchdog] stall detected at seg', idx, '→ advance');
+    window.speechSynthesis.cancel();
+    setTimeout(() => speakAt(segIdx + 1), 150);
+  }, estimatedMs / utt.rate + 4000);
+
+  // ── onend ──
+  utt.onend = () => {
+    if (currentUttId !== uttId) return; // stale
+    clearTimeout(watchdogTimer);
+    if (!isPlaying || isPaused) return;
+    pauseTimer = setTimeout(() => speakAt(segIdx + 1), seg.pause);
+  };
+
+  // ── onerror ──
+  utt.onerror = (e) => {
+    if (currentUttId !== uttId) return; // stale
+    clearTimeout(watchdogTimer);
+    // interrupted/canceled は意図的なので無視
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    if (!isPlaying || isPaused) return;
+    console.warn('[TTS error]', e.error, 'at seg', idx, '→ skip');
+    pauseTimer = setTimeout(() => speakAt(segIdx + 1), 350);
+  };
+
+  window.speechSynthesis.speak(utt);
+}
+
+// 字幕
+function updateSubtitle(text) {
+  const el = document.getElementById('subtitle-text');
+  el.classList.add('fade');
+  setTimeout(() => { el.textContent = text || '　'; el.classList.remove('fade'); }, 220);
+}
+
+// シーケンスバーUI（fix: handleを外側のdivで管理してclipされない）
+function updateSeqUI(cur, total) {
+  const pct = total > 0 ? Math.round((cur / total) * 100) : 0;
+  document.getElementById('seq-fill').style.width        = pct + '%';
+  document.getElementById('seq-handle').style.left       = pct + '%';
+  document.getElementById('seq-cur').textContent         = `${cur} / ${total}`;
+  document.getElementById('seq-pct-label').textContent   = pct + '%';
+}
+
+// 再生ボタン表示
+function updatePlayBtn() {
+  document.getElementById('btn-play').textContent = isPaused ? '▶' : '⏸';
+}
+
+// 一時停止 / 再開
+// iOSはresume()が信頼できないため pause = cancel、resume = speakAt(segIdx) で再スタート
+function togglePause() {
+  if (isPaused) {
+    // 再開
+    isPaused = false;
+    isPlaying = true;
+    updatePlayBtn();
+    window.speechSynthesis.cancel();
+    clearTimeout(pauseTimer);
+    setTimeout(() => speakAt(segIdx), 100);
+  } else {
+    // 一時停止
+    isPaused = true;
+    updatePlayBtn();
+    cancelAll();
+  }
+}
+
+// ±n セグメントスキップ
+function seekRel(delta) {
+  cancelAll();
+  const next = Math.max(0, Math.min(savedSegments.length - 1, segIdx + delta));
+  isPaused = false; isPlaying = true;
+  updatePlayBtn();
+  speakAt(next);
+}
+
+// シーケンスバー タップ/クリック（fix: touch対応）
+(function setupSeekTrack() {
+  const track = document.getElementById('seq-track');
+
+  function seekFromEvent(e) {
+    e.preventDefault();
+    const rect   = track.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const ratio  = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const target = Math.floor(ratio * savedSegments.length);
+    cancelAll();
+    isPaused = false; isPlaying = true;
+    updatePlayBtn();
+    speakAt(target);
+  }
+
+  track.addEventListener('click',      seekFromEvent, { passive: false });
+  track.addEventListener('touchstart', seekFromEvent, { passive: false });
+})();
+
+// キャンセル共通処理
+function cancelAll() {
+  currentUttId++;          // 既存コールバックを無効化
+  clearTimeout(pauseTimer);
+  clearTimeout(watchdogTimer);
+  window.speechSynthesis.cancel();
+}
+
+// 終了
+function stopPlayer() {
+  cancelAll();
+  isPlaying = false; isPaused = false;
+  showScreen('screen-story');
+}
+
+// コピー
+function copyStory() {
+  const text = savedTitle + '\n\n' + savedDisplay;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text)
+      .then(() => alert('コピーしました！'))
+      .catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  alert('コピーしました！');
+}
+
+/* ══════════════════════════════════════════
+   初期化
+══════════════════════════════════════════ */
+// iOS/Brave は getVoices() が非同期で返ってくる
+function initVoices() {
+  const v = window.speechSynthesis.getVoices();
+  if (v.length) selectedVoice = pickVoice();
+}
+window.speechSynthesis.onvoiceschanged = () => { initVoices(); };
+initVoices();
+
+window.addEventListener('pagehide', () => {
+  cancelAll(); isPlaying = false;
+});
+window.addEventListener('beforeunload', () => {
+  cancelAll(); isPlaying = false;
+});
+
+// iOS Brave: バックグラウンドから戻った時に発話が止まっていたら再開
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) return;
+  // バックグラウンドに行ったら一時停止扱い
+  if (isPlaying && !isPaused) {
+    isPaused = true;
+    updatePlayBtn();
+    cancelAll();
+    isPlaying = true; // キャンセルで false にしないよう再セット
+  }
+});
+</script>
+</body>
+</html>
